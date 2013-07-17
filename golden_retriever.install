@@ -1,0 +1,96 @@
+<?php
+
+function golden_retriever_schema()
+{
+	return array(
+		'golden_retriever_orders'=>array(
+			'description'=>t('Stores all orders.'),
+			'fields'=>array(
+				'id'=>array(
+					'description'=>t('id'),
+					'type'=>'serial',
+					'size'=>'normal',
+					'not null'=>true,
+					'unsigned'=>true,
+				),
+				'invoice_salutation'=>array(
+					'description'=>t('salutation'),
+					'type'=>'text',
+					'size'=>'normal'
+				),
+				'invoice_name'=>array(
+					'description'=>t('name'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'invoice_street'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'invoice_zipcode'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'invoice_city'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'invoice_country'=>array(
+					'description'=>t('country'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'delivery_salutation'=>array(
+					'description'=>t('salutation'),
+					'type'=>'text',
+					'size'=>'normal'
+				),
+				'delivery_name'=>array(
+					'description'=>t('name'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'delivery_street'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'delivery_zipcode'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'delivery_city'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'delivery_country'=>array(
+					'description'=>t('country'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'order_data'=>array(
+					'description'=>t('street'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+				'order_date'=>array(
+					'description'=>t('order date timestamp'),
+					'type'=>'int',
+					'size'=>'big',
+				),
+				'email'=>array(
+					'description'=>t('email'),
+					'type'=>'text',
+					'size'=>'normal',
+				),
+			),
+			'primary key'=>array('id'),
+			'mysql_engine'=>'InnoDB',
+		),
+	);
+}

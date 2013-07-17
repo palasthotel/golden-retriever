@@ -1,0 +1,523 @@
+<?php
+
+function golden_retriever_menu()
+{
+	$items=array();
+	$items['admin/config/golden_retriever']=array(
+		'title'=>'Golden Retriever',
+		'description'=>t('Configure Golden Retriever'),
+		'page callback'=>'drupal_get_form',
+		'page arguments' => array('golden_retriever_settings'),
+		'access arguments' => array('administer content'),
+		'type'=>MENU_NORMAL_ITEM,
+	);
+	$items['node/%node/add_to_cart']=array(
+		'title'=>'Add Item to Cart',
+		'description'=>t('Adds stuff to golden retrievers basket'),
+		'page callback'=>'golden_retriever_add',
+		'page arguments' =>array(1),
+		'access callback' => array('golden_retriever_access'),
+		'type'=>MENU_CALLBACK,
+	);
+	$items['node/%node/remove_from_cart']=array(
+		'title'=>'Remove Item from Cart',
+		'description'=>t('Removes stuff from golden retrievers basket'),
+		'page callback'=>'golden_retriever_remove',
+		'page arguments' => array(1),
+		'access callback' => array('golden_retriever_access'),
+		'type'=>MENU_CALLBACK,
+	);
+	$items['golden_retriever']=array(
+		'title'=>'Ajax endpoint for golden retriever',
+		'description'=>t('provides the shopping cart'),
+		'page callback'=>'golden_retriever_cart',
+		'access callback' => array('golden_retriever_access'),
+		'type'=>MENU_CALLBACK,
+	);
+	$items['checkout']=array(
+		'title'=>t('Perform checkout'),
+		'description'=>t('Order your stuff.'),
+		'page callback'=>'drupal_get_form',
+		'page arguments' => array('golden_retriever_checkout'),
+		'access callback' => array('golden_retriever_access'),
+		'type'=>MENU_CALLBACK,
+	);
+	$items['ordercomplete']=array(
+		'title'=>t('Checkout complete'),
+		'description'=>t('Order is complete'),
+		'page callback'=>'golden_retriever_ordercomplete',
+		'access callback' => array('golden_retriever_access'),
+		'type'=>MENU_CALLBACK,
+	);
+	return $items;
+}
+
+function golden_retriever_access()
+{
+	return TRUE;
+}
+
+function golden_retriever_settings()
+{
+	$fieldmap=field_info_field_map();
+	$types=node_type_get_types();
+	$type_slugs=array_keys($types);
+	$form=array();
+	foreach($type_slugs as $type_slug)
+	{
+		$options=array();
+		$first=NULL;
+		foreach($fieldmap as $name=>$data)
+		{
+			if(isset($data['bundles']['node']) && in_array($type_slug, $data['bundles']['node']))
+			{
+				if($data['type']=='number_float')
+				{
+					$options[$name]=$name;
+					if($first==NULL)
+						$first=$name;
+				}
+			}
+		}
+		if(count($options)>0)
+		{
+			$form[$type_slug]=array(
+				'#type'=>'fieldset',
+				'#title'=>$type_slug
+			);
+			$form[$type_slug]['golden_retriever_'.$type_slug.'_enabled']=array(
+				'#type'=>'checkbox',
+				'#default_value'=>variable_get('golden_retriever_'.$type_slug.'_enabled',0),
+				'#title'=>'Shopify',
+			);
+
+			$form[$type_slug]['golden_retriever_'.$type_slug.'_field']=array(
+				'#type'=>'radios',
+				'#title'=>'Price',
+				'#default_value'=>variable_get('golden_retriever_'.$type_slug.'_field',$first),
+				'#options'=>$options,
+			);
+		}
+	}
+	return system_settings_form($form);
+}
+
+function golden_retriever_node_view($node, $view_mode)
+{
+	if(variable_get('golden_retriever_'.$node->type.'_enabled',0))
+	{
+		$node->content['links']['golden_retriever']=array(
+			'#links' => array(
+				array(
+					'title'=>t('Add to cart'),
+					'href'=>'node/'.$node->nid.'/add_to_cart',
+					'query'=>drupal_get_destination(),
+				),
+			)
+		);
+	}
+	return $node;
+}
+
+function golden_retriever_add($node)
+{
+	drupal_page_is_cacheable(FALSE);
+	if(isset($_COOKIE['golden_retriever']))
+	{
+		$data=json_decode($_COOKIE['golden_retriever'],true);
+	}
+	else
+	{
+		$data=array();
+	}
+	if(isset($data[$node->nid]))
+	{
+		$data[$node->nid]++;
+	}
+	else
+	{
+		$data[$node->nid]=1;
+	}
+	setcookie("golden_retriever",json_encode($data),0,"/");
+	header("Cache-Control: no-cache");
+	drupal_goto();
+}
+
+function golden_retriever_remove($node)
+{
+	$data=json_decode($_COOKIE['golden_retriever'],true);
+	unset($data[$node->nid]);
+	setcookie("golden_retriever",json_encode($data),0,"/");
+	drupal_page_is_cacheable(FALSE);
+	header("Cache-Control: no-cache");
+	drupal_goto();
+}
+
+function golden_retriever_block_info()
+{
+	return array(
+		'cart'=>array(
+			'info'=>"Golden Retriever's Shopping Cart",
+			'cache'=>DRUPAL_NO_CACHE,
+		),
+	);
+}
+
+function golden_retriever_theme($existing, $type, $theme, $path)
+{
+	return array(
+		'golden_retriever_cart'=>array(
+			'variables'=>array('content'=>array()),
+			'template'=>'golden_retriever_cart',
+		),
+		'golden_retriever_cart_ajax'=>array(
+			'variables'=>array('content'=>array(),'destination'=>array()),
+			'template'=>'golden_retriever_cart_ajax',
+		),
+		'golden_retriever_ordercomplete'=>array(
+			'variables'=>array(),
+			'template'=>'golden_retriever_ordercomplete',
+		),
+		'golden_retriever_mailbody'=>array(
+			'variables'=>array(
+				'invoice_salutation'=>array(),
+				'invoice_name'=>array(),
+				'invoice_street'=>array(),
+				'invoice_zip'=>array(),
+				'invoice_city'=>array(),
+				'invoice_country'=>array(),
+				'delivery_salutation'=>array(),
+				'delivery_name'=>array(),
+				'delivery_street'=>array(),
+				'delivery_zip'=>array(),
+				'delivery_city'=>array(),
+				'delivery_country'=>array(),
+				'content'=>array(),
+			),
+			'template'=>'golden_retriever_mailbody',
+		),
+		'golden_retriever_usermailbody'=>array(
+			'variables'=>array(
+				'invoice_salutation'=>array(),
+				'invoice_name'=>array(),
+				'invoice_street'=>array(),
+				'invoice_zip'=>array(),
+				'invoice_city'=>array(),
+				'invoice_country'=>array(),
+				'delivery_salutation'=>array(),
+				'delivery_name'=>array(),
+				'delivery_street'=>array(),
+				'delivery_zip'=>array(),
+				'delivery_city'=>array(),
+				'delivery_country'=>array(),
+				'content'=>array(),
+			),
+			'template'=>'golden_retriever_usermailbody',
+		),
+	);
+}
+
+function golden_retriever_cart_content()
+{
+	$data=json_decode($_COOKIE['golden_retriever'],true);
+	$nodes=array_keys($data);
+	$nodes=node_load_multiple($nodes);
+	$renderinput=array();
+	foreach($data as $nid=>$amount)
+	{
+		$node=$nodes[$nid];
+		$fieldtitle=variable_get("golden_retriever_".$node->type."_field","");
+		$renderinput[]=array(
+			'node'=>$node,
+			'title'=>$node->title,
+			'amount'=>$amount,
+			'price'=>doubleval($node->{$fieldtitle}[LANGUAGE_NONE][0]['value']),
+			'sumprice'=>doubleval($node->{$fieldtitle}[LANGUAGE_NONE][0]['value'])*$amount
+		);
+	}
+	return $renderinput;
+}
+
+function golden_retriever_build_cart($showLink=TRUE)
+{
+	$renderinput=golden_retriever_cart_content();
+
+	$destination=drupal_get_destination();
+	$destination=$destination['destination'];
+	if(isset($_GET['destination']))
+		$destination=$_GET['destination'];
+	if(substr($destination, 0,1)=="/")
+		$destination=substr($destination, 1);
+
+	$destination=drupal_get_normal_path($destination);
+	return theme('golden_retriever_cart_ajax',array('content'=>$renderinput,'destination'=>$destination,'showLink'=>$showLink));
+}
+
+function golden_retriever_cart()
+{
+	drupal_page_is_cacheable(FALSE);
+	header("Cache-Control: no-cache");
+	echo golden_retriever_build_cart();
+}
+
+function golden_retriever_block_view($delta)
+{
+	if(isset($_COOKIE['golden_retriever']))
+	{
+		$data=json_decode($_COOKIE['golden_retriever'],true);
+		if(count($data)==0)
+		{
+			return array(
+				'subject'=>NULL,
+				'content'=>'',
+			);
+		}
+		else
+		{
+			$nodes=array_keys($data);
+			$nodes=node_load_multiple($nodes);
+			$renderinput=array();
+			drupal_add_js(drupal_get_path('module','golden_retriever').'/golden_retriever.js','file');
+			return array(
+				'subject'=>NULL,
+				'content'=>theme('golden_retriever_cart',array('content'=>array())),
+			);
+		}
+	}
+	else
+	{
+		return array(
+			'subject'=>NULL,
+			'content'=>'',
+		);
+	}
+}
+
+function golden_retriever_checkout()
+{
+	drupal_page_is_cacheable(FALSE);
+	header("Cache-Control: no-cache");
+	$form=array();
+	$form['order']=array(
+		'#type'=>'fieldset',
+		'#title'=>t('Ihre Bestellung')
+	);
+	$form['order']['html']=array(
+		'#type'=>'markup',
+		'#markup'=>golden_retriever_build_cart(FALSE),
+	);
+	$form['address']=array(
+		'#type'=>'fieldset',
+		'#title'=>t('Rechnungsanschrift'),
+	);
+	$form['address']['invoice_salutation']=array(
+		'#type'=>'select',
+		'#title'=>'Anrede',
+		'#options'=>array(
+			'Frau'=>'Frau',
+			'Herr'=>'Herr',
+		),
+		'#default_value'=>'Frau',
+	);
+	$form['address']['invoice_name']=array(
+		'#type'=>'textfield',
+		'#title'=>'Name',
+	);
+	$form['address']['invoice_street']=array(
+		'#type'=>'textfield',
+		'#title'=>'Strasse, Hausnummer',
+	);
+	$form['address']['invoice_zip']=array(
+		'#type'=>'textfield',
+		'#title'=>'PLZ',
+	);
+	$form['address']['invoice_city']=array(
+		'#type'=>'textfield',
+		'#title'=>'Ort',
+	);
+	$form['address']['invoice_country']=array(
+		'#type'=>'textfield',
+		'#title'=>'Land',
+	);
+	$form['address']['email']=array(
+		'#type'=>'textfield',
+		'#title'=>'E-Mail',
+	);
+
+	$form['address']['identical']=array(
+		'#type'=>'checkbox',
+		'#title'=>'Lieferanschrift ist identisch mit Rechnungsanschrift',
+		'#default_value'=>TRUE,
+	);
+
+	$form['delivery']=array(
+		'#type'=>'fieldset',
+		'#title'=>'Lieferanschrift',
+		'#attributes'=>array(
+			'style'=>'display: none',
+		),
+	);
+
+	$form['delivery']['delivery_salutation']=array(
+		'#type'=>'select',
+		'#title'=>'Anrede',
+		'#options'=>array(
+			'Frau'=>'Frau',
+			'Herr'=>'Herr',
+		),
+		'#default_value'=>'Frau',
+	);
+	$form['delivery']['delivery_name']=array(
+		'#type'=>'textfield',
+		'#title'=>'Name',
+	);
+	$form['delivery']['delivery_street']=array(
+		'#type'=>'textfield',
+		'#title'=>'Strasse, Hausnummer',
+	);
+	$form['delivery']['delivery_zip']=array(
+		'#type'=>'textfield',
+		'#title'=>'PLZ',
+	);
+	$form['delivery']['delivery_city']=array(
+		'#type'=>'textfield',
+		'#title'=>'Ort',
+	);
+	$form['delivery']['delivery_country']=array(
+		'#type'=>'textfield',
+		'#title'=>'Land',
+	);
+
+	$form['submit']=array(
+		'#type'=>'button',
+		'#value'=>'Kostenpflichtig bestellen',
+		'#executes_submit_callback'=>TRUE,
+		'#submit'=>array('golden_retriever_checkout_submit'),
+	);
+
+	drupal_add_js(drupal_get_path("module","golden_retriever")."/checkout.js","file");
+	return $form;
+}
+
+function golden_retriever_checkout_submit($form,&$form_state)
+{
+	$invoice_salutation =	$form_state['values']['invoice_salutation'];
+	$invoice_name 		=	$form_state['values']['invoice_name'];
+	$invoice_street		=	$form_state['values']['invoice_street'];
+	$invoice_zip		=	$form_state['values']['invoice_zip'];
+	$invoice_city		=	$form_state['values']['invoice_city'];
+	$invoice_country	=	$form_state['values']['invoice_country'];
+	$email	=	$form_state['values']['email'];
+
+	$delivery_salutation	=	$form_state['values']['invoice_salutation'];
+	$delivery_name 			=	$form_state['values']['invoice_name'];
+	$delivery_street    	=	$form_state['values']['invoice_street'];
+	$delivery_zip	    	=	$form_state['values']['invoice_zip'];
+	$delivery_city	    	=	$form_state['values']['invoice_city'];
+	$delivery_country		=	$form_state['values']['invoice_country'];
+	$order_date 				= time();
+
+	if(!$form_state['values']['identical'])
+	{
+		$delivery_salutation	=	$form_state['values']['delivery_salutation'];
+		$delivery_name 			=	$form_state['values']['delivery_name'];
+		$delivery_street    	=	$form_state['values']['delivery_street'];
+		$delivery_zip	    	=	$form_state['values']['delivery_zip'];
+		$delivery_city	    	=	$form_state['values']['delivery_city'];
+		$delivery_country		=	$form_state['values']['delivery_country'];
+	}
+
+	$content=golden_retriever_cart_content();
+
+	$order=array();
+	foreach($content as $elem)
+	{
+		$order[]=array(
+			'nid'=>$elem['node']->nid,
+			'amount'=>$elem['amount'],
+			'price'=>$elem['price'],
+			'total'=>$elem['sumprice'],
+		);
+	}
+
+	$query=db_insert("golden_retriever_orders")->fields(array(
+		'invoice_salutation'=>$invoice_salutation,
+		'invoice_name'=>$invoice_name,
+		'invoice_street'=>$invoice_street,
+		'invoice_zipcode'=>$invoice_zip,
+		'invoice_city'=>$invoice_city,
+		'invoice_country'=>$invoice_country,
+		'email'=>$email,
+		'delivery_salutation'=>$delivery_salutation,
+		'delivery_name'=>$delivery_name,
+		'delivery_street'=>$delivery_street,
+		'delivery_zipcode'=>$delivery_zip,
+		'delivery_city'=>$delivery_city,
+		'delivery_country'=>$delivery_country,
+		'order_data'=>json_encode($order),
+		'order_date'=>$order_date,
+	))->execute();
+
+	//TODO: Rule mit Aufbereitetem Text
+	$renderinput=golden_retriever_cart_content();
+	$mailbody=theme('golden_retriever_mailbody',array(
+		'invoice_salutation'=>$invoice_salutation,
+		'invoice_name'=>$invoice_name,
+		'invoice_street'=>$invoice_street,
+		'invoice_zip'=>$invoice_zip,
+		'invoice_city'=>$invoice_city,
+		'invoice_country'=>$invoice_country,
+		'email'=>$email,
+		'delivery_salutation'=>$delivery_salutation,
+		'delivery_name'=>$delivery_name,
+		'delivery_street'=>$delivery_street,
+		'delivery_zip'=>$delivery_zip,
+		'delivery_city'=>$delivery_city,
+		'delivery_country'=>$delivery_country,
+		'content'=>$renderinput,
+		'order_date'=>$order_date
+	));
+	$usermailbody=theme('golden_retriever_usermailbody',array(
+		'invoice_salutation'=>$invoice_salutation,
+		'invoice_name'=>$invoice_name,
+		'invoice_street'=>$invoice_street,
+		'invoice_zip'=>$invoice_zip,
+		'invoice_city'=>$invoice_city,
+		'invoice_country'=>$invoice_country,
+		'email'=>$email,
+		'delivery_salutation'=>$delivery_salutation,
+		'delivery_name'=>$delivery_name,
+		'delivery_street'=>$delivery_street,
+		'delivery_zip'=>$delivery_zip,
+		'delivery_city'=>$delivery_city,
+		'delivery_country'=>$delivery_country,
+		'content'=>$renderinput,
+		'order_date'=>$order_date
+	));
+
+	rules_invoke_event('golden_retriever_ordercomplete',$mailbody);
+	rules_invoke_event('golden_retriever_ordercomplete',$usermailbody);
+	setcookie("golden_retriever",json_encode(array()),0,"/");
+
+	drupal_goto('ordercomplete');
+}
+
+function golden_retriever_rules_event_info()
+{
+	return array(
+		'golden_retriever_ordercomplete'=> array(
+			'group'=>'Golden Retriever',
+			'module'=>'golden_retriever',
+			'label'=>t('Order completed'),
+			'access callback' => 'golden_retriever_access',
+			'variables'=>array(
+				'body'=>array('type'=>'text','label'=>t('prepared mail text'))
+			)
+		),
+	);
+}
+
+function golden_retriever_ordercomplete()
+{
+	return theme('golden_retriever_ordercomplete');
+}

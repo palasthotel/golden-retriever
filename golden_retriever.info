@@ -1,0 +1,5 @@
+name = Golden Retriever
+description = Provides a minimalistic Shop
+package = Palasthotel
+
+core = 7.x
